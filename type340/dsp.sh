@@ -1,14 +1,17 @@
-if [ "${TYPE340_SH+is_defined}" ]; then
+if [ "${TYPE340_DSP_SH+is_defined}" ]; then
 	return
 fi
-TYPE340_SH=true
+TYPE340_DSP_SH=true
 
 set -ue
 # set -uex
 
-TYPE340_MODE_PARAM=0
-TYPE340_MODE_POINT=1
-TYPE340_MODE_VECTOR=4
+TYPE340_DSP_MODE_PARAM=0
+TYPE340_DSP_MODE_POINT=1
+TYPE340_DSP_MODE_VECTOR=4
+
+TYPE340_DSP_AXIS_X=0
+TYPE340_DSP_AXIS_Y=1
 
 # ※ 引数の数値は全て8進数指定
 # ※ 機械語命令を出力する関数は、それを8進数6桁の数値文字列で出力する
@@ -35,7 +38,7 @@ TYPE340_MODE_VECTOR=4
 #                   |      0 | 最も暗い   |
 #                   |    ... | ...        |
 #                   |      7 | 最も明るい |
-type340_parameter_mode() {
+type340_dsp_parameter_mode() {
 	# 引数を変数へ取得
 	local mode=$1
 	local allow_lp_enable=$2
@@ -59,7 +62,7 @@ type340_parameter_mode() {
 	ml_2="${ml_2}${intensity_2}"
 
 	# 8進数へ変換し出力
-	printf "%06d" $(bc <<< "obase=8;ibase=2;$ml_2")
+	printf "%06d\n" $(bc <<< "obase=8;ibase=2;$ml_2")
 }
 
 # ポイントモードの機械語命令を出力
@@ -75,7 +78,7 @@ type340_parameter_mode() {
 # 5. intensify: 指定した座標に光のスポットを出現させるか否か(1ビット)
 # 6. address: 座標アドレス(10ビット)
 #             - 原点は左下
-type340_point_mode() {
+type340_dsp_point_mode() {
 	# 引数を変数へ取得
 	local position=$1
 	local mode=$2
@@ -93,10 +96,32 @@ type340_point_mode() {
 	ml_2="${ml_2}${intensify}${address_2}"
 
 	# 8進数へ変換し出力
-	printf "%06d" $(bc <<< "obase=8;ibase=2;$ml_2")
+	printf "%06d\n" $(bc <<< "obase=8;ibase=2;$ml_2")
 }
 
 # ベクターモードの機械語命令を出力
 # 引数:
-# 1. escape: 1の時、ディスプレイの各設定がクリアされ、パラメータモードへ戻る(1ビット)
-# 2. intensify: 1の時、
+# 1. escape: 1の時、ディスプレイの各設定がクリアされ、パラメータモードへ戻る
+#            (1ビット)
+# 2. intensify: 1の時、ベクトルの連続するすべての点が強調される(1ビット)
+# 3. delta_y: ベクトルのY軸成分の大きさと向き(8ビット)
+# 4. delta_x: ベクトルのX軸成分の大きさと向き(8ビット)
+# ※ delta_{y,x}それぞれの最上位ビットは符号ビットで、
+# 　 0が正方向(上または右)、1が負方向(下または左)
+type340_dsp_vector_mode() {
+	# 引数を変数へ取得
+	local escape=$1
+	local intensify=$2
+	local delta_y=$3
+	local delta_x=$4
+
+	# 2ビット以上の値は2進数へ変換
+	local delta_y_2=$(printf "%08d" $(bc <<< "obase=2;ibase=8;$delta_y"))
+	local delta_x_2=$(printf "%08d" $(bc <<< "obase=2;ibase=8;$delta_x"))
+
+	# 2進数で機械語を構成
+	local ml_2="${escape}${intensify}${delta_y_2}${delta_x_2}"
+
+	# 8進数へ変換し出力
+	printf "%06d\n" $(bc <<< "obase=8;ibase=2;$ml_2")
+}
