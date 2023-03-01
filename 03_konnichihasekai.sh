@@ -35,7 +35,7 @@ draw_kata_ko_204() {
 	local pos_y=$2
 	local font_size_10=204
 	local draw_size=$(bc <<< "obase=8;$font_size_10 - $CHAR_GAP")
-	local draw_size_1=$TYPE340_DRV_DRAW_LINE_MAX_LEN
+	local draw_size_1=$TYPE340_DRV_DRAW_LINE_MAX_XY
 	local draw_size_2=$(bc <<< "obase=8;ibase=8;$draw_size - $draw_size_1")
 	local minus_draw_size_1=$(bc <<< "obase=8;ibase=8;200 + $draw_size_1")
 	local minus_draw_size_2=$(bc <<< "obase=8;ibase=8;200 + $draw_size_2")

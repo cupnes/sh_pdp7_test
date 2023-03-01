@@ -71,7 +71,7 @@ type340_drv_set_position() {
 # 3. エスケープフラグ
 #    - 次も直線描画を行う場合は0を、
 #      そうでない場合は1を指定する
-TYPE340_DRV_DRAW_LINE_MAX_LEN=177	# 1度に描画できる直線の長さの最大(127)
+TYPE340_DRV_DRAW_LINE_MAX_XY=177	# 1度に描画できるX/Y成分の最大(127)
 type340_drv_draw_line() {
 	# 引数を変数へ設定
 	local delta_x=$1
