@@ -71,14 +71,60 @@ type340_drv_set_position() {
 # 3. エスケープフラグ
 #    - 次も直線描画を行う場合は0を、
 #      そうでない場合は1を指定する
-TYPE340_DRV_DRAW_LINE_MAX_XY=177	# 1度に描画できるX/Y成分の最大(127)
+TYPE340_DRV_DRAW_LINE_MAX_XY=177	# 1命令のX/Y成分の最大値
+TYPE340_DRV_DRAW_LINE_MAX_XY_10=127	# 1命令のX/Y成分の最大値(10進)
+# TODO ΔXあるいはΔY(あるいは両方)の絶対値が1命令のX/Y成分の最大値より大きい時
+#      ΔXあるいはΔY(あるいは両方)に負の値を使えるようにする
 type340_drv_draw_line() {
 	# 引数を変数へ設定
 	local delta_x=$1
 	local delta_y=$2
 	local escape=$3
 
-	# ベクターモードの命令を生成
+	# 後の扱いやすさのため、ΔXとΔYを10進数へ変換
+	local delta_x_10=$(bc <<< "ibase=8;$delta_x")
+	local delta_y_10=$(bc <<< "ibase=8;$delta_y")
+
+	# ΔXとΔYを比較し大きい方(等しい場合はΔX)をΔTとする
+	local delta_t_10
+	if [ $delta_x_10 -ge $delta_y_10 ]; then
+		# ΔX >= ΔY の場合
+		delta_t_10=$delta_x_10
+	else
+		# ΔX < ΔY の場合
+		delta_t_10=$delta_y_10
+	fi
+
+	# ΔT <= 1命令のX/Y成分の最大値 ?
+	if [ $delta_t_10 -le $TYPE340_DRV_DRAW_LINE_MAX_XY_10 ]; then
+		# ΔT <= 1命令のX/Y成分の最大値 の場合
+
+		# 与えられたΔX・ΔYでベクターモードの命令を生成
+		type340_dsp_vector_mode $escape $TYPE340_DRV_VECTOR_INTENSIFY \
+					$delta_y $delta_x
+		return
+	fi
+
+	# ΔT > 1命令のX/Y成分の最大値 の場合
+
+	# (ΔT / 1命令のX/Y成分の最大値)の小数点以下を切り上げた値をnとする
+	local n_10=$((delta_t_10 / TYPE340_DRV_DRAW_LINE_MAX_XY_10))
+	if [ $((delta_t_10 % TYPE340_DRV_DRAW_LINE_MAX_XY_10)) -gt 0 ]; then
+		n_10=$((n_10 + 1))
+	fi
+
+	# (ΔX / n)と(ΔY / n)を使用してn回ずつベクターモード命令を生成
+	# TODO 簡単のため小数点以下は切り捨てしているので、
+	#      指定されているより短く描画されることがある
+	delta_x=$(bc <<< "obase=8;$delta_x_10 / $n_10")
+	delta_y=$(bc <<< "obase=8;$delta_y_10 / $n_10")
+	local i
+	for ((i = 0; i < ($n_10 - 1); i++)); do
+		# escape = 0でベクターモードの命令を生成
+		type340_dsp_vector_mode 0 $TYPE340_DRV_VECTOR_INTENSIFY \
+					$delta_y $delta_x
+	done
+	# 与えられたescapeでベクターモードの命令を生成
 	type340_dsp_vector_mode $escape $TYPE340_DRV_VECTOR_INTENSIFY \
 				$delta_y $delta_x
 }
