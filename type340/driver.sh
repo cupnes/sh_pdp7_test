@@ -9,7 +9,7 @@ TYPE340_DRIVER_SH=true
 set -ue
 # set -uex
 
-# ※ 基本的に値は全て8進数
+# ※ 関数の引数や関数外で定義している変数の値は基本的に10進数
 
 # 使い方
 # 1. set_position で(X座標, Y座標)をセット
@@ -33,6 +33,31 @@ TYPE340_DRV_VECTOR_INTENSIFY=1
 TYPE340_DRV_X=0
 TYPE340_DRV_Y=0
 
+# 与えられた10進数の値を8進数へ変換する
+# 引数:
+# 1. 変換する値(10進数)
+#    - 正の値の場合、単に8進数へ変換するだけ
+#    - 負の値の場合、ビット7(8ビットにおける最上位ビット)を1にする
+#      そのため、値自体は7ビット(127)以下であること
+type340_drv_conv_to_8_8bit() {
+	local val=$1
+
+	if [ $val -ge 0 ]; then
+		# $val >= 0 の場合
+
+		# 8進数へ変換
+		bc <<< "obase=8;$val"
+	else
+		# $val < 0 の場合
+
+		# 絶対値を取得
+		local val_abs=${val#-}
+
+		# 最上位ビットを1にしつつ、絶対値を8進数へ変換
+		bc <<< "obase=8;128 + $val_abs"
+	fi
+}
+
 # 座標をセットする
 # 引数:
 # 1. X座標
@@ -41,6 +66,10 @@ type340_drv_set_position() {
 	# 引数を変数へ設定
 	TYPE340_DRV_X=$1
 	TYPE340_DRV_Y=$2
+
+	# 8進数へ変換
+	local x_8=$(bc <<< "obase=8;$TYPE340_DRV_X")
+	local y_8=$(bc <<< "obase=8;$TYPE340_DRV_Y")
 
 	# パラメータモードの命令を生成
 	type340_dsp_parameter_mode $TYPE340_DSP_MODE_POINT \
@@ -57,11 +86,11 @@ type340_drv_set_position() {
 	type340_dsp_point_mode $TYPE340_DSP_AXIS_X $TYPE340_DSP_MODE_POINT \
 			       $TYPE340_DRV_ALLOW_LP_ENABLE \
 			       $TYPE340_DRV_LP_ENABLE \
-			       $TYPE340_DRV_POINT_INTENSIFY $TYPE340_DRV_X
+			       $TYPE340_DRV_POINT_INTENSIFY $x_8
 	type340_dsp_point_mode $TYPE340_DSP_AXIS_Y $TYPE340_DSP_MODE_VECTOR \
 			       $TYPE340_DRV_ALLOW_LP_ENABLE \
 			       $TYPE340_DRV_LP_ENABLE \
-			       $TYPE340_DRV_POINT_INTENSIFY $TYPE340_DRV_Y
+			       $TYPE340_DRV_POINT_INTENSIFY $y_8
 }
 
 # 現在の座標から(ΔX, ΔY)の直線を描画
@@ -71,8 +100,8 @@ type340_drv_set_position() {
 # 3. エスケープフラグ
 #    - 次も直線描画を行う場合は0を、
 #      そうでない場合は1を指定する
-TYPE340_DRV_DRAW_LINE_MAX_XY=177	# 1命令のX/Y成分の最大値
-TYPE340_DRV_DRAW_LINE_MAX_XY_10=127	# 1命令のX/Y成分の最大値(10進)
+TYPE340_DRV_DRAW_LINE_MAX_XY=127	# 1命令のX/Y成分の最大値
+TYPE340_DRV_DRAW_LINE_MAX_XY_8=177	# 1命令のX/Y成分の最大値(8進)
 # TODO ΔXあるいはΔY(あるいは両方)の絶対値が1命令のX/Y成分の最大値より大きい時
 #      ΔXあるいはΔY(あるいは両方)に負の値を使えるようにする
 type340_drv_draw_line() {
@@ -81,52 +110,61 @@ type340_drv_draw_line() {
 	local delta_y=$2
 	local escape=$3
 
-	# 後の扱いやすさのため、ΔXとΔYを10進数へ変換
-	local delta_x_10=$(bc <<< "ibase=8;$delta_x")
-	local delta_y_10=$(bc <<< "ibase=8;$delta_y")
+	# ΔXとΔYの絶対値を取得
+	local delta_x_abs=${delta_x#-}
+	local delta_y_abs=${delta_y#-}
 
-	# ΔXとΔYを比較し大きい方(等しい場合はΔX)をΔTとする
-	local delta_t_10
-	if [ $delta_x_10 -ge $delta_y_10 ]; then
-		# ΔX >= ΔY の場合
-		delta_t_10=$delta_x_10
+	# ΔXとΔYの絶対値を比較し、大きい方(等しい場合はΔX)の絶対値をΔTとする
+	local delta_t
+	if [ $delta_x_abs -ge $delta_y_abs ]; then
+		# ΔX(絶対値) >= ΔY(絶対値) の場合
+		delta_t=$delta_x_abs
 	else
-		# ΔX < ΔY の場合
-		delta_t_10=$delta_y_10
+		# ΔX(絶対値) < ΔY(絶対値) の場合
+		delta_t=$delta_y_abs
 	fi
 
+	local delta_x_8
+	local delta_y_8
+
 	# ΔT <= 1命令のX/Y成分の最大値 ?
-	if [ $delta_t_10 -le $TYPE340_DRV_DRAW_LINE_MAX_XY_10 ]; then
+	if [ $delta_t -le $TYPE340_DRV_DRAW_LINE_MAX_XY ]; then
 		# ΔT <= 1命令のX/Y成分の最大値 の場合
 
-		# 与えられたΔX・ΔYでベクターモードの命令を生成
+		# 与えられたΔX・ΔYを8進数へ変換
+		delta_x_8=$(type340_drv_conv_to_8_8bit $delta_x)
+		delta_y_8=$(type340_drv_conv_to_8_8bit $delta_y)
+
+		# ベクターモードの命令を生成
 		type340_dsp_vector_mode $escape $TYPE340_DRV_VECTOR_INTENSIFY \
-					$delta_y $delta_x
+					$delta_y_8 $delta_x_8
 		return
 	fi
 
 	# ΔT > 1命令のX/Y成分の最大値 の場合
 
 	# (ΔT / 1命令のX/Y成分の最大値)の小数点以下を切り上げた値をnとする
-	local n_10=$((delta_t_10 / TYPE340_DRV_DRAW_LINE_MAX_XY_10))
-	if [ $((delta_t_10 % TYPE340_DRV_DRAW_LINE_MAX_XY_10)) -gt 0 ]; then
-		n_10=$((n_10 + 1))
+	local n=$((delta_t / TYPE340_DRV_DRAW_LINE_MAX_XY))
+	if [ $((delta_t % TYPE340_DRV_DRAW_LINE_MAX_XY)) -gt 0 ]; then
+		n=$((n + 1))
 	fi
 
 	# (ΔX / n)と(ΔY / n)を使用してn回ずつベクターモード命令を生成
 	# TODO 簡単のため小数点以下は切り捨てしているので、
 	#      指定されているより短く描画されることがある
-	delta_x=$(bc <<< "obase=8;$delta_x_10 / $n_10")
-	delta_y=$(bc <<< "obase=8;$delta_y_10 / $n_10")
+	local delta_x_div_n=$((delta_x / n))
+	local delta_y_div_n=$((delta_y / n))
+	delta_x_8=$(type340_drv_conv_to_8_8bit $delta_x_div_n)
+	delta_y_8=$(type340_drv_conv_to_8_8bit $delta_y_div_n)
 	local i
-	for ((i = 0; i < ($n_10 - 1); i++)); do
+	for ((i = 0; i < ($n - 1); i++)); do
 		# escape = 0でベクターモードの命令を生成
 		type340_dsp_vector_mode 0 $TYPE340_DRV_VECTOR_INTENSIFY \
-					$delta_y $delta_x
+					$delta_y_8 $delta_x_8
 	done
 	# 与えられたescapeでベクターモードの命令を生成
 	type340_dsp_vector_mode $escape $TYPE340_DRV_VECTOR_INTENSIFY \
-				$delta_y $delta_x
+				$delta_y_8 $delta_x_8
 }
 
 # 描画を終える
