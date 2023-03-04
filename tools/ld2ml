@@ -3,6 +3,8 @@
 # ※ 使いやすさのため、左上を原点とした座標で処理できるようにしている。
 # 　 TYPE340が扱う通りの左下を原点とした座標の場合は
 #    --bl-orig オプションを指定すること。
+# ※ 入力ファイル形式はCSVだが、空行と'#'で始まる行は
+#    無視されるので含めても構わない。
 
 . type340/driver.sh
 
@@ -36,7 +38,11 @@ fi
 SRC_LD_CSV=$1
 DST_ML_TXT=$2
 
-for row in $(cat $SRC_LD_CSV); do
+# 空行と'#'で始まる行を除外する
+grep -vE '^$|^#' $SRC_LD_CSV >$DST_ML_TXT.tmp
+trap "rm $DST_ML_TXT.tmp" EXIT
+
+for row in $(cat $DST_ML_TXT.tmp); do
 	op=$(echo $row | cut -d',' -f1)
 	cur_x=$(echo $row | cut -d',' -f2)
 	cur_y=$(echo $row | cut -d',' -f3)
