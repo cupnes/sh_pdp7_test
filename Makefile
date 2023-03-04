@@ -1,4 +1,4 @@
-SAMPLES = 01_test340.simh 02_square.simh 03_konnichiha_sekai.simh 04_lt_01.simh
+SAMPLES = 01_test340.simh 02_square.simh 03_konnichiha_sekai.simh 04_lt_01.simh 04_lt_02.simh
 TYPE340_START_ADDR = 1000
 
 all: $(SAMPLES)
