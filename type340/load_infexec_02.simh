@@ -1,0 +1,5 @@
+d -m 200 law 2000
+d -m 201 idla
+d -m 202 idsi
+d -m 203 jmp 202
+d -m 204 jmp 200
